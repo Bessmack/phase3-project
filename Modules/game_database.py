@@ -10,7 +10,7 @@ def init_db():
             id INTEGER PRIMARY KEY,
             player TEXT NOT NULL,
             score INTEGER NOT NULL,
-            created at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
         """)
     db_connection.commit()
     db_connection.close()
@@ -33,10 +33,9 @@ def get_highest_score(limit = 10):
     db_cursor.execute(
         """
             SELECT player, score, created_at FROM scores ORDER BY score DESC, created_at ASC LIMIT ?
-        """, (limit)
+        """, (limit,),
     )
     rows = db_cursor.fetchall()
-    db_connection.commit()
     db_connection.close()
 
     return rows
