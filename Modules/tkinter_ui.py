@@ -31,12 +31,12 @@ def tkinter_ui():
         root.destroy()
 
     def show_scores_window(parent):
-        win = tk.Toplevel(parent)
-        win.title("High Scores")
-        win.geometry("700x520")
+        window = tk.Toplevel(parent)
+        window.title("High Scores")
+        window.geometry("700x520")
 
         cols = ("Player", "Score", "When")
-        tree = ttk.Treeview(win, columns=cols, show="headings")
+        tree = ttk.Treeview(window, columns=cols, show="headings")
         for c in cols:
             tree.heading(c, text=c)
             tree.column(c, anchor="center")
@@ -45,7 +45,7 @@ def tkinter_ui():
         for p, s, when in get_highest_score(20):
             tree.insert("", tk.END, values=(p, s, when))
 
-        ttk.Button(win, text="Close", command=win.destroy).pack(pady=6)
+        ttk.Button(window, text="Close", command=window.destroy).pack(pady=6)
 
 
     # Adding style for my Interface buttons
@@ -75,9 +75,3 @@ def tkinter_ui():
     button3.grid(row=2, column=2, padx=10)
 
     root.mainloop()
-
-
-tkinter_ui()
-
-
-
