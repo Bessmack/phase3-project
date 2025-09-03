@@ -4,13 +4,13 @@ Space Shooter with 3 distinct modes (Easy, Medium, Hard)
 - Enhanced with images, sounds, and moving backgrounds
 - Pygame launcher with 3 big buttons to start each mode
 - Tkinter scoreboard with CRUD functionality
-- SQLite database (scores.db) for score storage
+- SQLAlchemy with SQLite database (scores.db) for score storage
 
 Run:
     python main.py
 
 Dependencies:
-    pip install pygame
+    pip install pygame sqlalchemy
 
 Assets:
     Place in a 'media/' folder relative to this script:
@@ -26,85 +26,119 @@ import sys
 import math
 import random
 import time
-import sqlite3
 from datetime import datetime
 import pygame
+
+# SQLAlchemy imports
+from sqlalchemy import create_engine, Column, Integer, String, Float, CheckConstraint
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
 
 # Constants
 WIDTH, HEIGHT = 900, 650
 FPS = 60
-DB_FILE = "scores.db"
+DB_FILE = "sqlite:///scores.db"
 
-# --------------------------- Database Layer ---------------------------------
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS scores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    player TEXT NOT NULL,
-    mode TEXT NOT NULL CHECK(mode in ('Easy','Medium','Hard')),
-    score INTEGER NOT NULL,
-    duration_sec REAL NOT NULL,
-    played_at TEXT NOT NULL
-);
-"""
+# SQLAlchemy setup
+Base = declarative_base()
+engine = create_engine(DB_FILE, echo=False)
+Session = sessionmaker(bind=engine)
 
-def db_connect():
-    conn = sqlite3.connect(DB_FILE)
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+# Database Model
+class Score(Base):
+    __tablename__ = 'scores'
+    __table_args__ = (
+        CheckConstraint("mode in ('Easy','Medium','Hard')", name='check_mode'),
+    )
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player = Column(String, nullable=False)
+    mode = Column(String, nullable=False)
+    score = Column(Integer, nullable=False)
+    duration_sec = Column(Float, nullable=False)
+    played_at = Column(String, nullable=False)
 
 def db_init():
-    conn = db_connect()
-    with conn:
-        conn.executescript(SCHEMA)
-    conn.close()
+    try:
+        Base.metadata.create_all(engine)
+    except SQLAlchemyError as e:
+        print(f"Error initializing database: {e}")
 
 def db_add_score(player: str, mode: str, score: int, duration_sec: float, played_at: str | None = None):
     if not played_at:
         played_at = datetime.now().isoformat(timespec='seconds')
-    conn = db_connect()
-    with conn:
-        conn.execute(
-            "INSERT INTO scores(player, mode, score, duration_sec, played_at) VALUES (?,?,?,?,?)",
-            (player, mode, score, float(duration_sec), played_at),
+    
+    try:
+        session = Session()
+        new_score = Score(
+            player=player,
+            mode=mode,
+            score=score,
+            duration_sec=float(duration_sec),
+            played_at=played_at
         )
-    conn.close()
+        session.add(new_score)
+        session.commit()
+    except SQLAlchemyError as e:
+        print(f"Error adding score: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 def db_get_scores(mode_filter: str | None = None):
-    conn = db_connect()
-    cur = conn.cursor()
-    if mode_filter and mode_filter in ("Easy", "Medium", "Hard"):
-        cur.execute("SELECT id, player, mode, score, duration_sec, played_at FROM scores WHERE mode=? ORDER BY score DESC, played_at DESC", (mode_filter,))
-    else:
-        cur.execute("SELECT id, player, mode, score, duration_sec, played_at FROM scores ORDER BY score DESC, played_at DESC")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+    try:
+        session = Session()
+        query = session.query(Score)
+        
+        if mode_filter and mode_filter in ("Easy", "Medium", "Hard"):
+            query = query.filter(Score.mode == mode_filter)
+            
+        results = query.order_by(Score.score.desc(), Score.played_at.desc()).all()
+        
+        # Convert to list of tuples for compatibility with existing code
+        return [(r.id, r.player, r.mode, r.score, r.duration_sec, r.played_at) for r in results]
+    except SQLAlchemyError as e:
+        print(f"Error getting scores: {e}")
+        return []
+    finally:
+        session.close()
 
 def db_update_score(record_id: int, player: str | None = None, mode: str | None = None, score: int | None = None):
-    fields = []
-    params = []
-    if player is not None:
-        fields.append("player=?")
-        params.append(player)
-    if mode is not None:
-        fields.append("mode=?")
-        params.append(mode)
-    if score is not None:
-        fields.append("score=?")
-        params.append(int(score))
-    if not fields:
-        return
-    params.append(record_id)
-    conn = db_connect()
-    with conn:
-        conn.execute(f"UPDATE scores SET {', '.join(fields)} WHERE id=?", params)
-    conn.close()
+    try:
+        session = Session()
+        score_obj = session.query(Score).filter(Score.id == record_id).first()
+        
+        if not score_obj:
+            print(f"Score with id {record_id} not found")
+            return
+            
+        if player is not None:
+            score_obj.player = player
+        if mode is not None:
+            score_obj.mode = mode
+        if score is not None:
+            score_obj.score = int(score)
+            
+        session.commit()
+    except SQLAlchemyError as e:
+        print(f"Error updating score: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 def db_delete_score(record_id: int):
-    conn = db_connect()
-    with conn:
-        conn.execute("DELETE FROM scores WHERE id=?", (record_id,))
-    conn.close()
+    try:
+        session = Session()
+        score_obj = session.query(Score).filter(Score.id == record_id).first()
+        
+        if score_obj:
+            session.delete(score_obj)
+            session.commit()
+    except SQLAlchemyError as e:
+        print(f"Error deleting score: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 # --------------------------- Tkinter UI (Scoreboard & CRUD) -----------------
 def open_scoreboard(last_result: dict | None = None):
