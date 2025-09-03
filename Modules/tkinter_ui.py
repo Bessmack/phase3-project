@@ -66,12 +66,14 @@ def tkinter_ui():
 
     # Create buttons
     button1 = create_button(btns_section, "Start Game", start_game)
-    button1.grid(row=0, column=0, padx=10)
+    button1.grid(row=1, column=0, padx=10)
 
     button2 = create_button(btns_section, "High Scores", lambda:show_scores_window(root))
-    button2.grid(row=1, column=1, padx=10)
+    button2.grid(row=0, column=1, padx=10)
 
     button3 = create_button(btns_section, "Exit.", root.destroy)
-    button3.grid(row=2, column=2, padx=10)
+    button3.grid(row=1, column=2, padx=10)
 
     root.mainloop()
+
+tkinter_ui()
